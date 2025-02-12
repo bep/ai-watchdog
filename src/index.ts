@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Configuration, OpenAIApi } from 'openai';
-import * as process from 'process';
 
 async function extractConfidenceScore(response: string): Promise<number> {
   try {
@@ -20,12 +19,7 @@ async function extractConfidenceScore(response: string): Promise<number> {
 async function run(): Promise<void> {
   try {
     // Get inputs
-    const githubToken = process.env.GITHUB_TOKEN;
-
-    if (!githubToken) {
-      throw new Error('GITHUB_TOKEN is missing. This action must be run inside a GitHub Actions environment.');
-    }
-    
+    const githubToken = core.getInput('github-token', { required: true });
     const openaiApiKey = core.getInput('openai-api-key', { required: true });
 
     // Initialize GitHub client
