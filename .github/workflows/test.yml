@@ -4,6 +4,11 @@ on:
     types: [opened, synchronize]
   workflow_dispatch:
 
+# Add these permissions
+permissions:
+  pull-requests: write
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
