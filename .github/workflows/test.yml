@@ -1,8 +1,12 @@
 name: Test Action
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [ main ]
   issue_comment:
     types: [created]
 
@@ -21,7 +25,11 @@ jobs:
        github.event.issue.pull_request && 
        contains(github.event.comment.body, '/detect-ai'))
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Important: checkout the PR code explicitly
+          ref: ${{ github.event.pull_request.head.sha }}
       
       - name: Setup Node.js
         uses: actions/setup-node@v3
