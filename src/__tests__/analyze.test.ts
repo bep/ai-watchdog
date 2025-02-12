@@ -1,13 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { analyzeWithGPT, extractConfidenceScore } from '../index';
+import { TestCache } from './cache-helper';
 
 async function analyzeFiles() {
-  // Get API key from environment
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Get API key from environment and validate it
+  const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY environment variable is required');
   }
+
+  // Initialize cache
+  const cache = new TestCache();
 
   // Helper function to read file content
   const readFileContent = (filePath: string): string => {
@@ -20,6 +24,21 @@ async function analyzeFiles() {
       .map(file => path.join(dirPath, file));
   };
 
+  // Helper function to get analysis (from cache or API)
+  async function getAnalysis(content: string, metadata: Record<string, any>): Promise<string> {
+    const cacheKey = JSON.stringify({ content, metadata });
+    const cachedResponse = cache.get(cacheKey);
+    
+    if (cachedResponse) {
+      console.log('(Using cached response)');
+      return cachedResponse;
+    }
+
+    const response = await analyzeWithGPT(apiKey, metadata);
+    cache.set(cacheKey, response);
+    return response;
+  }
+
   // Analysis results storage
   const aiScores: number[] = [];
   const humanScores: number[] = [];
@@ -30,15 +49,16 @@ async function analyzeFiles() {
   
   for (const filePath of aiFiles) {
     const content = readFileContent(filePath);
-    const response = await analyzeWithGPT(apiKey, {
+    const metadata = {
       title: 'Test PR',
       description: 'Test Description',
       changes: [{
         filename: filePath,
         additions: content
       }]
-    });
+    };
 
+    const response = await getAnalysis(content, metadata);
     const confidenceScore = await extractConfidenceScore(response);
     aiScores.push(confidenceScore);
 
@@ -54,15 +74,16 @@ async function analyzeFiles() {
   
   for (const filePath of humanFiles) {
     const content = readFileContent(filePath);
-    const response = await analyzeWithGPT(apiKey, {
+    const metadata = {
       title: 'Test PR',
       description: 'Test Description',
       changes: [{
         filename: filePath,
         additions: content
       }]
-    });
+    };
 
+    const response = await getAnalysis(content, metadata);
     const confidenceScore = await extractConfidenceScore(response);
     humanScores.push(confidenceScore);
 
