@@ -1,0 +1,320 @@
+diff --git a/doc/source/indexing.rst b/doc/source/indexing.rst
+index b9ba5ba8687a3..a23af20e4e80a 100644
+--- a/doc/source/indexing.rst
++++ b/doc/source/indexing.rst
+@@ -654,7 +654,7 @@ instance:
+ 
+ .. ipython:: python
+ 
+-   midx = MultiIndex(levels=[['one', 'two'], ['x','y']],
++   midx = MultiIndex(levels=[['zero', 'one'], ['x','y']],
+                      labels=[[1,1,0,0],[1,0,1,0]])
+    df = DataFrame(randn(4,2), index=midx)
+    print df
+@@ -670,13 +670,15 @@ The need for sortedness
+ ~~~~~~~~~~~~~~~~~~~~~~~
+ 
+ **Caveat emptor**: the present implementation of ``MultiIndex`` requires that
+-the labels be lexicographically sorted into groups for some of the slicing /
+-indexing routines to work correctly. You can think about this as meaning that
+-the axis is broken up into a tree structure, where every leaf in a particular
+-branch shares the same labels at that level of the hierarchy. However, the
+-``MultiIndex`` does not enforce this: **you are responsible for ensuring that
+-things are properly sorted**. There is an important new method ``sortlevel``
+-which will lexicographically sort an axis with a ``MultiIndex``:
++the labels be sorted for some of the slicing / indexing routines to work
++correctly. You can think about breaking the axis into unique groups, where at
++the hierarchical level of interest, each distinct group shares a label, but no
++two have the same label. However, the ``MultiIndex`` does not enforce this:
++**you are responsible for ensuring that things are properly sorted**. There is
++an important new method ``sortlevel`` to sort an axis within a ``MultiIndex``
++so that its labels are grouped and sorted by the original ordering of the
++associated factor at that level. Note that this does not necessarily mean the
++labels will be sorted lexicographically!
+ 
+ .. ipython:: python
+ 
+diff --git a/pandas/core/frame.py b/pandas/core/frame.py
+index c08f80ecbfc5e..5bb0843178d44 100644
+--- a/pandas/core/frame.py
++++ b/pandas/core/frame.py
+@@ -815,19 +815,25 @@ def to_panel(self):
+ 
+         self._consolidate_inplace()
+ 
+-        major_axis, minor_axis = self.index.levels
+-        major_labels, minor_labels = self.index.labels
++        # minor axis must be sorted 
++        if self.index.lexsort_depth < 2:
++            selfsorted = self.sortlevel(0)
++        else:
++            selfsorted = self
++
++        major_axis, minor_axis = selfsorted.index.levels
++        major_labels, minor_labels = selfsorted.index.labels
+ 
+         shape = len(major_axis), len(minor_axis)
+ 
+         new_blocks = []
+-        for block in self._data.blocks:
++        for block in selfsorted._data.blocks:
+             newb = block2d_to_block3d(block.values.T, block.items, shape,
+                                       major_labels, minor_labels,
+-                                      ref_items=self.columns)
++                                      ref_items=selfsorted.columns)
+             new_blocks.append(newb)
+ 
+-        new_axes = [self.columns, major_axis, minor_axis]
++        new_axes = [selfsorted.columns, major_axis, minor_axis]
+         new_mgr = BlockManager(new_blocks, new_axes)
+ 
+         return Panel(new_mgr)
+@@ -4049,9 +4055,23 @@ def complete_dataframe(obj, prev_completions):
+     except Exception:
+         pass
+ 
+-def _lexsort_indexer(keys):
++def _indexer_from_factorized(labels, shape, compress=True):
+     from pandas.core.groupby import get_group_index, _compress_group_index
+ 
++    group_index = get_group_index(labels, shape)
++
++    if compress:
++        comp_ids, obs_ids = _compress_group_index(group_index)
++        max_group = len(obs_ids)
++    else:
++        comp_ids = group_index
++        max_group = np.prod(shape)
++
++    indexer, _ = lib.groupsort_indexer(comp_ids.astype('i4'), max_group)
++
++    return indexer
++
++def _lexsort_indexer(keys):
+     labels = []
+     shape = []
+     for key in keys:
+@@ -4063,12 +4083,7 @@ def _lexsort_indexer(keys):
+         ids, _ = rizer.factorize(key, sort=True)
+         labels.append(ids)
+         shape.append(len(rizer.uniques))
+-
+-    group_index = get_group_index(labels, shape)
+-    comp_ids, obs_ids = _compress_group_index(group_index)
+-    max_group = len(obs_ids)
+-    indexer, _ = lib.groupsort_indexer(comp_ids.astype('i4'), max_group)
+-    return indexer
++    return _indexer_from_factorized(labels, shape)
+ 
+ if __name__ == '__main__':
+     import nose
+diff --git a/pandas/core/groupby.py b/pandas/core/groupby.py
+index 1657be888663c..9a798f1bda7e8 100644
+--- a/pandas/core/groupby.py
++++ b/pandas/core/groupby.py
+@@ -1323,6 +1323,11 @@ def _get_slice(slob):
+         yield i, _get_slice(slice(start, end))
+ 
+ def get_group_index(label_list, shape):
++    """
++    For the particular label_list, gets the offsets into the hypothetical list
++    representing the totally ordered cartesian product of all possible label
++    combinations.
++    """
+     if len(label_list) == 1:
+         return label_list[0]
+ 
+@@ -1405,24 +1410,38 @@ def cython_aggregate(values, group_index, ngroups, how='add'):
+ # sorting levels...cleverly?
+ 
+ def _compress_group_index(group_index, sort=True):
++    """
++    Group_index is offsets into cartesian product of all possible labels. This
++    space can be huge, so this function compresses it, by computing offsets
++    (comp_ids) into the list of unique labels (obs_group_ids).
++    """
++
+     uniques = []
+     table = lib.Int64HashTable(len(group_index))
+ 
+     group_index = _ensure_int64(group_index)
++
++    # note, group labels come out ascending (ie, 1,2,3 etc)
+     comp_ids = table.get_labels_groupby(group_index, uniques)
+ 
+-    # these are the ones we observed
++    # these are the unique ones we observed, in the order we observed them
+     obs_group_ids = np.array(uniques, dtype='i8')
+ 
+     if sort and len(obs_group_ids) > 0:
++        # sorter is index where elements ought to go
+         sorter = obs_group_ids.argsort()
++
++        # reverse_indexer is where elements came from
+         reverse_indexer = np.empty(len(sorter), dtype='i4')
+         reverse_indexer.put(sorter, np.arange(len(sorter)))
+ 
+         mask = comp_ids < 0
++
++        # move comp_ids to right locations (ie, unsort ascending labels)
+         comp_ids = reverse_indexer.take(comp_ids)
+         np.putmask(comp_ids, mask, -1)
+ 
++        # sort observed ids
+         obs_group_ids = obs_group_ids.take(sorter)
+ 
+     return comp_ids, obs_group_ids
+diff --git a/pandas/core/index.py b/pandas/core/index.py
+index 436c74d4c5de7..caa62337c5bae 100644
+--- a/pandas/core/index.py
++++ b/pandas/core/index.py
+@@ -1095,6 +1095,16 @@ def copy(self, order='C'):
+     def dtype(self):
+         return np.dtype('O')
+ 
++    @staticmethod
++    def _from_elements(values, labels=None, levels=None, names=None,
++                       sortorder=None):
++        index = values.view(MultiIndex)
++        index.levels = levels
++        index.labels = labels
++        index.names  = names
++        index.sortorder = sortorder
++        return index
++
+     def _get_level_number(self, level):
+         try:
+             count = self.names.count(level)
+@@ -1506,7 +1516,8 @@ def __getslice__(self, i, j):
+ 
+     def sortlevel(self, level=0, ascending=True):
+         """
+-        Sort MultiIndex lexicographically by requested level
++        Sort MultiIndex at the requested level. The result will respect the
++        original ordering of the associated factor at that level.
+ 
+         Parameters
+         ----------
+@@ -1519,21 +1530,30 @@ def sortlevel(self, level=0, ascending=True):
+         -------
+         sorted_index : MultiIndex
+         """
+-        # TODO: check if lexsorted when level=0
++        from pandas.core.frame import _indexer_from_factorized
+ 
+         labels = list(self.labels)
++
+         level = self._get_level_number(level)
+         primary = labels.pop(level)
+ 
+-        # Lexsort starts from END
+-        indexer = np.lexsort(tuple(labels[::-1]) + (primary,))
++        shape = list(self.levshape)
++        primshp = shape.pop(level)
+ 
++        indexer = _indexer_from_factorized((primary,) + tuple(labels),
++                                           (primshp,) + tuple(shape),
++                                           compress=False)
+         if not ascending:
+             indexer = indexer[::-1]
+ 
+         new_labels = [lab.take(indexer) for lab in self.labels]
+-        new_index = MultiIndex(levels=self.levels, labels=new_labels,
+-                               names=self.names, sortorder=level)
++
++
++        new_index = MultiIndex._from_elements(self.values.take(indexer),
++                                              labels=new_labels,
++                                              levels=self.levels,
++                                              names=self.names,
++                                              sortorder=level)
+ 
+         return new_index, indexer
+ 
+diff --git a/pandas/tests/test_index.py b/pandas/tests/test_index.py
+index c408cf38382c6..12e96a1a1a2aa 100644
+--- a/pandas/tests/test_index.py
++++ b/pandas/tests/test_index.py
+@@ -1186,6 +1186,28 @@ def test_sortlevel(self):
+         sorted_idx, _ = index.sortlevel(1, ascending=False)
+         self.assert_(sorted_idx.equals(expected[::-1]))
+ 
++    def test_sortlevel_deterministic(self):
++        tuples = [('bar', 'one'), ('foo', 'two'), ('qux', 'two'),
++                  ('foo', 'one'), ('baz', 'two'), ('qux', 'one')]
++
++        index = MultiIndex.from_tuples(tuples)
++
++        sorted_idx, _ = index.sortlevel(0)
++        expected = MultiIndex.from_tuples(sorted(tuples))
++        self.assert_(sorted_idx.equals(expected))
++
++        sorted_idx, _ = index.sortlevel(0, ascending=False)
++        self.assert_(sorted_idx.equals(expected[::-1]))
++
++        sorted_idx, _ = index.sortlevel(1)
++        by1 = sorted(tuples, key=lambda x: (x[1], x[0]))
++        expected = MultiIndex.from_tuples(by1)
++        self.assert_(sorted_idx.equals(expected))
++
++        sorted_idx, _ = index.sortlevel(1, ascending=False)
++        self.assert_(sorted_idx.equals(expected[::-1]))
++
++
+     def test_dims(self):
+         pass
+ 
+diff --git a/pandas/tests/test_panel.py b/pandas/tests/test_panel.py
+index b6720e5d2c88b..3e07174bdec1b 100644
+--- a/pandas/tests/test_panel.py
++++ b/pandas/tests/test_panel.py
+@@ -965,6 +965,14 @@ def test_group_agg(self):
+         f2 = lambda x: np.zeros((2,2))
+         self.assertRaises(Exception, group_agg, values, bounds, f2)
+ 
++    def test_from_frame_level1_unsorted(self):
++        tuples = [('MSFT', 3), ('MSFT', 2), ('AAPL', 2), 
++                  ('AAPL', 1), ('MSFT', 1)]
++        midx = MultiIndex.from_tuples(tuples)
++        df = DataFrame(np.random.rand(5,4), index=midx)
++        p = df.to_panel()
++        assert_frame_equal(p.minor_xs(2), df.ix[:,2].sort_index())
++
+ class TestLongPanel(unittest.TestCase):
+     """
+     LongPanel no longer exists, but...
+diff --git a/vb_suite/indexing.py b/vb_suite/indexing.py
+index 3f4a12cabdd5e..3c10a1553af0d 100644
+--- a/vb_suite/indexing.py
++++ b/vb_suite/indexing.py
+@@ -93,3 +93,17 @@
+ indexing_dataframe_boolean_rows_object = \
+     Benchmark("df[obj_indexer]", setup,
+               name='indexing_dataframe_boolean_rows_object')
++
++#----------------------------------------------------------------------
++# MultiIndex sortlevel
++
++setup = common_setup + """
++a = np.repeat(np.arange(100), 1000)
++b = np.tile(np.arange(1000), 100)
++midx = MultiIndex.from_arrays([a, b])
++midx = midx.take(np.random.permutation(np.arange(100000)))
++"""
++sort_level_zero = Benchmark("midx.sortlevel(0)", setup, 
++                            start_date=datetime(2012,1,1))
++sort_level_one = Benchmark("midx.sortlevel(1)", setup,
++                           start_date=datetime(2012,1,1))
+diff --git a/vb_suite/suite.py b/vb_suite/suite.py
+index 9c0e1d2f721a6..f65e59c56d46f 100644
+--- a/vb_suite/suite.py
++++ b/vb_suite/suite.py
+@@ -44,7 +44,7 @@
+ """
+ dependencies = ['pandas_vb_common.py']
+ 
+-START_DATE = datetime(2010, 6, 1)
++START_DATE = datetime(2012, 1, 20)
+ 
+ repo = GitRepo(REPO_PATH)
+ 
