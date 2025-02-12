@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Configuration, OpenAIApi } from 'openai';
+import * as process from 'process';
 
 async function extractConfidenceScore(response: string): Promise<number> {
   try {
@@ -19,7 +20,12 @@ async function extractConfidenceScore(response: string): Promise<number> {
 async function run(): Promise<void> {
   try {
     // Get inputs
-    const githubToken = core.getInput('github-token', { required: true });
+    const githubToken = process.env.GITHUB_TOKEN;
+
+    if (!githubToken) {
+      throw new Error('GITHUB_TOKEN is missing. This action must be run inside a GitHub Actions environment.');
+    }
+    
     const openaiApiKey = core.getInput('openai-api-key', { required: true });
 
     // Initialize GitHub client
@@ -47,20 +53,16 @@ async function run(): Promise<void> {
     });
 
     // Prepare content for analysis
-    const changes = prFiles.map(file => {
-      console.log(file)
-      return ({
+    const changes = prFiles.map(file => ({
       filename: file.filename,
       changes: file.patch || 'No visible changes'
-    })});
+    }));
 
     const contentToAnalyze = {
       title: pullRequest.title,
       description: pullRequest.body || 'No description provided',
       changes: changes
     };
-
-    console.log(contentToAnalyze);
 
     // Initialize OpenAI
     const configuration = new Configuration({
