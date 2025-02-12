@@ -47,10 +47,12 @@ async function run(): Promise<void> {
     });
 
     // Prepare content for analysis
-    const changes = prFiles.map((file) => ({
+    const changes = prFiles.map(file => {
+      console.log(file)
+      return ({
       filename: file.filename,
       changes: file.patch || 'No visible changes'
-    }));
+    })});
 
     const contentToAnalyze = {
       title: pullRequest.title,
