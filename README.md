@@ -1,4 +1,6 @@
-![AI Watchdog](doggie.png)
+<p align="center">
+  <img src="doggie.png" alt="AI Watchdog" width="50%">
+</p>
 
 # AI Watchdog GitHub Action
 
