@@ -1,0 +1,84 @@
+diff --git a/tests/ai/mandlebrot.py b/tests/ai/mandlebrot.py
+new file mode 100644
+index 0000000..f847c6a
+--- /dev/null
++++ b/tests/ai/mandlebrot.py
+@@ -0,0 +1,89 @@
++import sys
++import numpy as np
++from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
++from PyQt6.QtGui import QPainter, QImage, QColor
++from PyQt6.QtCore import Qt
++
++class MandelbrotWidget(QWidget):
++    def __init__(self):
++        super().__init__()
++        self.zoom = 1.0
++        self.center_x = 0
++        self.center_y = 0
++        self.max_iter = 100
++        self.setMinimumSize(800, 600)
++
++    def compute_mandelbrot(self, width, height):
++        x_min = self.center_x - 2.0/self.zoom
++        x_max = self.center_x + 2.0/self.zoom
++        y_min = self.center_y - 1.5/self.zoom
++        y_max = self.center_y + 1.5/self.zoom
++        
++        x = np.linspace(x_min, x_max, width)
++        y = np.linspace(y_min, y_max, height)
++        X, Y = np.meshgrid(x, y)
++        Z = X + Y*1j
++        C = Z.copy()
++        
++        mask = np.zeros_like(Z, dtype=bool)
++        for i in range(self.max_iter):
++            Z = Z*Z + C
++            mask = np.logical_or(mask, np.abs(Z) > 2)
++            Z[mask] = 2
++        
++        return np.log(np.abs(Z))
++
++    def paintEvent(self, event):
++        painter = QPainter(self)
++        width = self.width()
++        height = self.height()
++        
++        # Compute the Mandelbrot set
++        mandel = self.compute_mandelbrot(width, height)
++        
++        # Create QImage and set pixels
++        image = QImage(width, height, QImage.Format.Format_RGB32)
++        for x in range(width):
++            for y in range(height):
++                value = mandel[y, x]
++                # Map the value to a color (you can modify this for different color schemes)
++                color = int(255 * (value / np.log(2)))
++                color = max(0, min(255, color))
++                image.setPixel(x, y, QColor(color, color, color).rgb())
++        
++        painter.drawImage(0, 0, image)
++
++    def mousePressEvent(self, event):
++        if event.button() == Qt.MouseButton.LeftButton:
++            # Zoom in
++            self.zoom *= 2
++            self.center_x += (event.position().x()/self.width() - 0.5) * 4/self.zoom
++            self.center_y += (event.position().y()/self.height() - 0.5) * 3/self.zoom
++        elif event.button() == Qt.MouseButton.RightButton:
++            # Zoom out
++            self.zoom /= 2
++        self.update()
++
++class MainWindow(QMainWindow):
++    def __init__(self):
++        super().__init__()
++        self.setWindowTitle("Mandelbrot Set Visualizer")
++        self.mandelbrot_widget = MandelbrotWidget()
++        self.setCentralWidget(self.mandelbrot_widget)
++
++if __name__ == '__main__':
++    app = QApplication(sys.argv)
++    window = MainWindow()
++    window.show()
++    sys.exit(app.exec())
