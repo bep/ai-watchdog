@@ -6,7 +6,7 @@ import { Configuration, OpenAIApi } from 'openai';
 async function run(): Promise<void> {
   try {
     // Get inputs
-    const githubToken = core.getInput('github-token', { required: true });
+    const githubToken = core.getInput('token', { required: true });
     const openaiApiKey = core.getInput('openai-api-key', { required: true });
 
     // Initialize GitHub client
