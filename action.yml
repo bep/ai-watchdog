@@ -22,7 +22,7 @@ inputs:
 
 runs:
   using: 'node16'
-  main: 'src/index.ts'
+  main: 'dist/index.js'
 
 branding:
   icon: 'eye'
