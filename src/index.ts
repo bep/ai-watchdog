@@ -2,11 +2,6 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Configuration, OpenAIApi } from 'openai';
 
-interface FileChange {
-  filename: string;
-  patch: string;
-}
-
 async function extractConfidenceScore(response: string): Promise<number> {
   try {
     // Look for patterns like "Confidence Score: 85%" or "Confidence Score: 85"
@@ -52,7 +47,7 @@ async function run(): Promise<void> {
     });
 
     // Prepare content for analysis
-    const changes = prFiles.map((file: FileChange) => ({
+    const changes = prFiles.map((file) => ({
       filename: file.filename,
       changes: file.patch || 'No visible changes'
     }));
