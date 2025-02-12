@@ -1,0 +1,130 @@
+diff --git a/tests/ai/stock_ticker.py b/tests/ai/stock_ticker.py
+new file mode 100644
+index 0000000..f847c6a
+--- /dev/null
++++ b/tests/ai/stock_ticker.py
+@@ -0,0 +1,134 @@
++import pandas as pd
++import numpy as np
++from binance.client import Client
++from datetime import datetime, timedelta
++import plotly.graph_objects as go
++from sklearn.linear_model import LinearRegression
++from sklearn.model_selection import train_test_split
++
++def get_doge_data():
++    # Initialize Binance client (no auth needed for historical data)
++    client = Client()
++    
++    # Calculate date range (3 months ago until now)
++    end_date = datetime.now()
++    start_date = end_date - timedelta(days=90)
++    
++    # Get historical klines/candlestick data
++    klines = client.get_historical_klines(
++        "DOGEUSDT",
++        Client.KLINE_INTERVAL_1DAY,
++        start_date.strftime("%d %b %Y %H:%M:%S"),
++        end_date.strftime("%d %b %Y %H:%M:%S")
++    )
++    
++    # Convert to DataFrame
++    df = pd.DataFrame(klines, columns=[
++        'timestamp', 'open', 'high', 'low', 'close', 
++        'volume', 'close_time', 'quote_asset_volume',
++        'number_of_trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'
++    ])
++    
++    # Convert timestamp to datetime
++    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
++    
++    # Convert relevant columns to float
++    for col in ['open', 'high', 'low', 'close', 'volume']:
++        df[col] = df[col].astype(float)
++    
++    return df
++
++def visualize_candlesticks(df):
++    fig = go.Figure(data=[go.Candlestick(
++        x=df['timestamp'],
++        open=df['open'],
++        high=df['high'],
++        low=df['low'],
++        close=df['close']
++    )])
++    
++    fig.update_layout(
++        title='DOGE/USDT Price Movement (Last 3 Months)',
++        yaxis_title='Price (USDT)',
++        xaxis_title='Date'
++    )
++    
++    fig.show()
++
++def predict_future_prices(df):
++    # Prepare features
++    df['day_of_week'] = df['timestamp'].dt.dayofweek
++    df['day_of_month'] = df['timestamp'].dt.day
++    
++    # Create target variable (next day's closing price)
++    df['target'] = df['close'].shift(-1)
++    
++    # Remove last row since it won't have a target
++    df = df.dropna()
++    
++    # Prepare features for model
++    features = ['open', 'high', 'low', 'close', 'volume', 
++               'day_of_week', 'day_of_month']
++    X = df[features]
++    y = df['target']
++    
++    # Split data
++    X_train, X_test, y_train, y_test = train_test_split(
++        X, y, test_size=0.2, random_state=42
++    )
++    
++    # Train model
++    model = LinearRegression()
++    model.fit(X_train, y_train)
++    
++    # Prepare future dates for prediction
++    last_date = df['timestamp'].iloc[-1]
++    future_dates = [last_date + timedelta(days=x) for x in range(1, 6)]
++    
++    # Create feature set for future predictions
++    future_features = []
++    last_row = df.iloc[-1]
++    
++    for future_date in future_dates:
++        future_features.append([
++            last_row['close'],  # Using last close as open
++            last_row['close'] * 1.02,  # Estimated high
++            last_row['close'] * 0.98,  # Estimated low
++            last_row['close'],  # Using last close
++            last_row['volume'],  # Using last volume
++            future_date.dayofweek,
++            future_date.day
++        ])
++    
++    # Make predictions
++    future_predictions = model.predict(future_features)
++    
++    return pd.DataFrame({
++        'Date': future_dates,
++        'Predicted_Price': future_predictions
++    })
++
++def main():
++    # Get historical data
++    df = get_doge_data()
++    
++    # Visualize candlesticks
++    visualize_candlesticks(df)
++    
++    # Make predictions
++    predictions = predict_future_prices(df)
++    print("\nPrice Predictions for Next 5 Days:")
++    print(predictions.to_string(index=False))
++
++if __name__ == "__main__":
++    main()
