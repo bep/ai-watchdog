@@ -84,7 +84,20 @@ async function run(): Promise<void> {
 
     // Fail if confidence score is too high
     if (confidenceScore > 80) {
-      core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
+      if (core.getInput('fail-when-confident')) {
+        core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
+      }
+
+      const prLabel = core.getInput('pr-label');
+      if (prLabel) {
+        core.info(`Adding label "${prLabel}" to PR #${prNumber}`);
+        await octokit.rest.issues.addLabels({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: prNumber,
+          labels: [prLabel],
+        });
+      }
     }
 
   } catch (error) {
@@ -147,4 +160,8 @@ export async function analyzeWithGPT(openaiApiKey: string, content: any): Promis
   return completion.data.choices[0]?.message?.content || 'No response';
 }
 
-run(); 
+
+// Only run if this file is executed directly
+if (require.main === module) {
+  run();
+}

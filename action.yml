@@ -19,6 +19,13 @@ inputs:
 
       [Learn more about creating and using encrypted secrets](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/creating-and-using-encrypted-secrets)
     default: ${{ github.token }}
+  pr-label:
+    description: 'Label to add to the PR if confidence score is > 80%'
+    required: false
+  fail-when-confident:
+    description: 'When true, the action will fail if confidence score is > 80%'
+    type: boolean
+    default: true
 
 runs:
   using: 'node16'

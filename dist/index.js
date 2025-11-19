@@ -40946,6 +40946,16 @@ function run() {
             // Fail if confidence score is too high
             if (confidenceScore > 80) {
                 core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
+                const prLabel = core.getInput('pr-label');
+                if (prLabel) {
+                    core.info(`Adding label "${prLabel}" to PR #${prNumber}`);
+                    yield octokit.rest.issues.addLabels({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: prNumber,
+                        labels: [prLabel],
+                    });
+                }
             }
         }
         catch (error) {
@@ -41010,7 +41020,6 @@ function analyzeWithGPT(openaiApiKey, content) {
         return ((_b = (_a = completion.data.choices[0]) === null || _a === void 0 ? void 0 : _a.message) === null || _b === void 0 ? void 0 : _b.content) || 'No response';
     });
 }
-run();
 
 
 /***/ }),
