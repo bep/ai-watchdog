@@ -84,7 +84,8 @@ async function run(): Promise<void> {
 
     // Fail if confidence score is too high
     if (confidenceScore > 80) {
-      if (core.getInput('fail-when-confident')) {
+      const failWhenConfident = core.getInput('fail-when-confident').toUpperCase() === 'TRUE';
+      if (failWhenConfident) {
         core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
       }
 

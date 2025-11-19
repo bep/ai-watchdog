@@ -40945,7 +40945,8 @@ function run() {
             core.setOutput('confidence_score', confidenceScore);
             // Fail if confidence score is too high
             if (confidenceScore > 80) {
-                if (core.getInput('fail-when-confident')) {
+                const failWhenConfident = core.getInput('fail-when-confident').toUpperCase() === 'TRUE';
+                if (failWhenConfident) {
                     core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
                 }
                 const prLabel = core.getInput('pr-label');
