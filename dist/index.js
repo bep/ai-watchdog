@@ -40945,7 +40945,9 @@ function run() {
             core.setOutput('confidence_score', confidenceScore);
             // Fail if confidence score is too high
             if (confidenceScore > 80) {
-                core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
+                if (core.getInput('fail-when-confident')) {
+                    core.setFailed(`AI detection confidence score (${confidenceScore}%) exceeds threshold of 80%`);
+                }
                 const prLabel = core.getInput('pr-label');
                 if (prLabel) {
                     core.info(`Adding label "${prLabel}" to PR #${prNumber}`);
@@ -41020,6 +41022,7 @@ function analyzeWithGPT(openaiApiKey, content) {
         return ((_b = (_a = completion.data.choices[0]) === null || _a === void 0 ? void 0 : _a.message) === null || _b === void 0 ? void 0 : _b.content) || 'No response';
     });
 }
+run();
 
 
 /***/ }),
