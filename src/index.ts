@@ -160,8 +160,5 @@ export async function analyzeWithGPT(openaiApiKey: string, content: any): Promis
   return completion.data.choices[0]?.message?.content || 'No response';
 }
 
+run();
 
-// Only run if this file is executed directly
-if (require.main === module) {
-  run();
-}
