@@ -40880,7 +40880,7 @@ const github = __importStar(__nccwpck_require__(5438));
 const openai_1 = __nccwpck_require__(9211);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a;
+        var _a, _b, _c, _d;
         try {
             // Get inputs
             const githubToken = core.getInput('token', { required: true });
@@ -40899,6 +40899,15 @@ function run() {
                 repo: context.repo.repo,
                 pull_number: prNumber,
             });
+            const prUserLoginsSkip = core.getInput('pr-user-logins-skip');
+            if (prUserLoginsSkip) {
+                const logins = prUserLoginsSkip.split(',').map(item => item.trim());
+                if (logins.includes(((_b = pullRequest.user) === null || _b === void 0 ? void 0 : _b.login) || '')) {
+                    core.info(`Skipping AI analysis for PR #${prNumber} by user "${(_c = pullRequest.user) === null || _c === void 0 ? void 0 : _c.login}"`);
+                    return;
+                }
+            }
+            core.info(`Starting AI analysis for PR #${prNumber} by user "${(_d = pullRequest.user) === null || _d === void 0 ? void 0 : _d.login}"`);
             // Fetch PR files and extract only additions
             const { data: prFiles } = yield octokit.rest.pulls.listFiles({
                 owner: context.repo.owner,

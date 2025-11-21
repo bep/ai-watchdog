@@ -26,6 +26,18 @@ async function run(): Promise<void> {
       pull_number: prNumber,
     });
 
+   const prUserLoginsSkip = core.getInput('pr-user-logins-skip');
+   if (prUserLoginsSkip) {
+     const logins = prUserLoginsSkip.split(',').map(item => item.trim());
+     if (logins.includes(pullRequest.user?.login || '')) {
+       core.info(`Skipping AI analysis for PR #${prNumber} by user "${pullRequest.user?.login}"`);
+       return;
+     }
+   }
+
+   core.info(`Starting AI analysis for PR #${prNumber} by user "${pullRequest.user?.login}"`);
+
+
     // Fetch PR files and extract only additions
     const { data: prFiles } = await octokit.rest.pulls.listFiles({
       owner: context.repo.owner,
