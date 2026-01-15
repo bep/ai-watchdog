@@ -30,7 +30,10 @@ jobs:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | openai-api-key | OpenAI API key for AI detection | Yes | N/A |
-| token | GitHub token used to fetch and comment on PRs | No | ${{ github.token }} |
+| token | GitHub token used to fetch and comment on PRs | No | `${{ github.token }}` |
+| pr-label | Label to add to the PR if confidence score is > 80% | No | N/A |
+| pr-user-logins-skip | Comma separated list of user logins to skip (e.g. dependabot) | No | N/A |
+| fail-when-confident | When true, the action will fail if confidence score is > 80% | No | `true` |
 
 ## How It Works
 
