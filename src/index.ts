@@ -144,8 +144,7 @@ export async function analyzeWithGPT(openaiApiKey: string, content: any): Promis
 
   // Query OpenAI with a structured prompt
   const completion = await openai.createChatCompletion({
-    // model: "gpt-3.5-turbo",
-    model: "chatgpt-4o-latest",
+    model: "gpt-5.1-chat-latest",
     messages: [
       {
         role: "system",
